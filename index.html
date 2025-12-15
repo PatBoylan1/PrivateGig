@@ -695,7 +695,7 @@
         // Load songs from JSON
         async function loadSongs() {
             try {
-                const response = await fetch('https://patboylan1.github.io/songs.json');
+                const response = await fetch('https://patboylan1.github.io/PianoBar/songs.json');
                 allSongs = await response.json();
                 generateFilterButtons(); // Generate filters after loading songs
                 renderSongs();
