@@ -774,7 +774,7 @@
                         song_title: song.title,
                         artist: song.artist,
                         timestamp: new Date().toLocaleString()
-                    }, 'Wj-2wlmVbqvHPFZBx')
+                    })
                     .then(function(response) {
                         showNotification(`Request sent!<br><strong>${song.title}</strong><br>has been added to the queue`, 3000);
                     }, function(error) {
