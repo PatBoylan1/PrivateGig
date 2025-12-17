@@ -70,12 +70,40 @@
         .search-container {
             display: flex;
             justify-content: center;
+            align-items: center;
             margin-bottom: 30px;
             padding: 0 10px;
             position: relative;
             transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
                         padding 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
                         box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        
+        /* Clear search button */
+        .clear-search {
+            position: absolute;
+            right: 20px;
+            background: none;
+            border: none;
+            color: #666666;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        
+        .clear-search:hover {
+            opacity: 1;
+        }
+        
+        .clear-search:active {
+            opacity: 0.4;
         }
 
         /* No sticky positioning - using min-height on table instead */
@@ -265,6 +293,11 @@
                 max-width: 100%;
                 font-size: 16px;
             }
+            
+            .clear-search {
+                right: 20px;
+                font-size: 22px;
+            }
 
             .error-message p {
                 font-size: 14px;
@@ -304,15 +337,16 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background-color: #ffffff;
-            color: #000000;
-            padding: 12px 20px;
-            border-radius: 8px;
+            background-color: #2c2c2e;
+            color: #ffffff;
+            padding: 20px;
+            border-radius: 14px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
             z-index: 10000;
             text-align: center !important;
-            font-size: 16px;
-            font-weight: 600;
+            font-size: 17px;
+            font-weight: 400;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
             min-width: 280px;
             max-width: 90%;
             line-height: 1.4;
@@ -362,8 +396,9 @@
     </div>
 
     <!-- Search Bar -->
-    <div class="search-container">
+    <div class="search-container" id="searchContainer">
         <input type="text" class="search-input" id="searchInput" placeholder="Search for song">
+        <button class="clear-search" id="clearSearch" style="display: none;">✕</button>
     </div>
 
     <!-- Song Table -->
@@ -646,16 +681,24 @@
         function generateFilterButtons() {
             const filterContainer = document.getElementById('filterButtons');
             
-            // Get unique categories from all songs
-            const categories = new Set();
+            // Get unique categories from all songs (case-insensitive)
+            const categoriesMap = new Map(); // lowercase -> original case
             allSongs.forEach(song => {
                 if (song.tags && Array.isArray(song.tags)) {
-                    song.tags.forEach(tag => categories.add(tag));
+                    song.tags.forEach(tag => {
+                        const lowerTag = tag.toLowerCase();
+                        // Keep the first capitalization we encounter
+                        if (!categoriesMap.has(lowerTag)) {
+                            categoriesMap.set(lowerTag, tag);
+                        }
+                    });
                 }
             });
             
-            // Convert to sorted array
-            const sortedCategories = Array.from(categories).sort();
+            // Convert to sorted array (by lowercase for consistent sorting)
+            const sortedCategories = Array.from(categoriesMap.entries())
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(entry => entry[1]); // Get original capitalization
             
             // Clear existing buttons
             filterContainer.innerHTML = '';
@@ -672,7 +715,7 @@
                 const button = document.createElement('button');
                 button.className = 'filter-btn';
                 button.setAttribute('data-filter', category);
-                button.textContent = category;
+                button.textContent = category.toUpperCase(); // Display in uppercase
                 filterContainer.appendChild(button);
             });
             
@@ -715,32 +758,51 @@
             const rows = tbody.querySelectorAll('tr:not(.error-message):not(.spacer-row)');
             rows.forEach(row => row.remove());
 
-            // Filter by category first
+            // Special handling for Holiday filter
             let filteredSongs = allSongs;
-            if (currentFilter !== 'all') {
+            
+            if (currentSearchTerm) {
+                // SPECIAL CASE: If in Holiday filter, search ONLY holiday songs
+                if (currentFilter.toLowerCase() === 'holiday') {
+                    const holidaySongs = allSongs.filter(song => 
+                        song.tags && song.tags.some(tag => tag.toLowerCase() === 'holiday')
+                    );
+                    filteredSongs = fuzzySearch(currentSearchTerm, holidaySongs);
+                } else if (currentFilter.toLowerCase() === 'all') {
+                    // "All" filter: search ALL songs INCLUDING holiday
+                    filteredSongs = fuzzySearch(currentSearchTerm, allSongs);
+                } else {
+                    // Other filters (Country, Rock, etc): search ALL songs EXCEPT holiday
+                    const nonHolidaySongs = allSongs.filter(song => 
+                        !song.tags || !song.tags.some(tag => tag.toLowerCase() === 'holiday')
+                    );
+                    filteredSongs = fuzzySearch(currentSearchTerm, nonHolidaySongs);
+                }
+            } else if (currentFilter !== 'all') {
+                // No search term, apply filter normally (case-insensitive)
                 filteredSongs = allSongs.filter(song => 
-                    song.tags && song.tags.includes(currentFilter)
+                    song.tags && song.tags.some(tag => tag.toLowerCase() === currentFilter.toLowerCase())
                 );
             }
-
-            // Apply search if there's a search term
-            if (currentSearchTerm) {
-                filteredSongs = fuzzySearch(currentSearchTerm, filteredSongs);
-            }
+            // else: No search, "All" filter: show all songs (allSongs already set)
 
             // Show error if no results
             if (currentSearchTerm && filteredSongs.length === 0) {
                 errorMessage.classList.add('show');
-                document.getElementById('searchTerm').textContent = currentSearchTerm;
                 
-                // Add filter context if a filter is active
-                const filterContext = document.getElementById('filterContext');
-                if (currentFilter !== 'all') {
-                    const filterName = currentFilter.charAt(0).toUpperCase() + currentFilter.slice(1).toLowerCase().replace(/-/g, ' ');
-                    filterContext.innerHTML = 'within <strong>' + filterName + '</strong>';
+                // Different error message for Holiday filter
+                const errorText = document.getElementById('errorText');
+                const searchTermElement = document.getElementById('searchTerm');
+                
+                if (currentFilter.toLowerCase() === 'holiday') {
+                    errorText.innerHTML = `Pat doesn't know the holiday song<br><strong>${currentSearchTerm}</strong>`;
                 } else {
-                    filterContext.textContent = '';
+                    errorText.innerHTML = `Pat doesn't know <strong id="searchTerm">${currentSearchTerm}</strong>`;
                 }
+                
+                // Clear filter context (no longer needed with new search logic)
+                const filterContext = document.getElementById('filterContext');
+                filterContext.textContent = '';
             } else {
                 errorMessage.classList.remove('show');
             }
@@ -827,6 +889,23 @@
         searchInput.addEventListener('input', function() {
             currentSearchTerm = this.value;
             renderSongs();
+            
+            // Show/hide clear button
+            const clearBtn = document.getElementById('clearSearch');
+            if (this.value.length > 0) {
+                clearBtn.style.display = 'flex';
+            } else {
+                clearBtn.style.display = 'none';
+            }
+        });
+        
+        // Clear search button functionality
+        document.getElementById('clearSearch').addEventListener('click', function() {
+            searchInput.value = '';
+            currentSearchTerm = '';
+            this.style.display = 'none';
+            renderSongs();
+            searchInput.focus();
         });
 
         // Custom notification function (replaces alert to avoid domain prefix)
